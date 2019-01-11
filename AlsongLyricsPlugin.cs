@@ -27,7 +27,7 @@ namespace MusicBeePlugin
             about.Type = PluginType.LyricsRetrieval;
             about.VersionMajor = 0;  // your plugin version
             about.VersionMinor = 1;
-            about.Revision = 0;
+            about.Revision = 1;
             about.MinInterfaceVersion = MinInterfaceVersion;
             about.MinApiRevision = MinApiRevision;
             about.ReceiveNotifications = ReceiveNotificationFlags.StartupOnly;
