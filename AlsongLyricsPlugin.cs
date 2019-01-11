@@ -72,14 +72,40 @@ namespace MusicBeePlugin
         private const string ALSONG_API = "http://lyrics.alsong.co.kr/alsongwebservice/service1.asmx";
         private const string ALSONG_POST_TEMPLATE = "<Envelope xmlns=\"http://www.w3.org/2003/05/soap-envelope\"><Body><GetResembleLyric2 xmlns=\"ALSongWebServer\"><stQuery><strTitle>{0}</strTitle><strArtistName>{1}</strArtistName></stQuery></GetResembleLyric2></Body></Envelope>";
 
-        private Regex lyricsReg = new Regex("<strLyric>(.*?)</strLyric>");
+        private Regex lyricsReg = new Regex("<strLyric>(.*?)</strLyric>", RegexOptions.Singleline);
         private Regex timingsReg = new Regex("^\\[\\d\\d:\\d\\d.\\d\\d\\]", RegexOptions.Multiline);
+
+        // workaround for getting other results
+        private Match previousMatch = null;
+        private string previousResult = null;
+        private string previousFile = null;
 
         // return lyrics for the requested artist/title from the requested provider
         // only required if PluginType = LyricsRetrieval
         // return null if no lyrics are found
         public string RetrieveLyrics(string sourceFileUrl, string artist, string trackTitle, string album, bool synchronisedPreferred, string provider)
         {
+            string currFile = mbApiInterface.NowPlaying_GetFileUrl();
+            if (previousFile == currFile && previousMatch != null)
+            {
+                previousMatch = previousMatch.NextMatch();
+                if (!previousMatch.Success)
+                {
+                    previousMatch = lyricsReg.Match(previousResult);
+                    mbApiInterface.MB_SetBackgroundTaskMessage("ALSong Lyrics: No more results. Resetted to the first result.");
+                }
+                else
+                {
+                    mbApiInterface.MB_SetBackgroundTaskMessage("ALSong Lyrics: Set lyric data to next result.");
+                }
+                return previousMatch.Groups[1].Value;
+            }
+
+
+            previousFile = currFile;
+            previousMatch = null;
+            previousResult = null;
+
             var req = (HttpWebRequest)WebRequest.Create(ALSONG_API);
             var data = Encoding.UTF8.GetBytes(String.Format(ALSONG_POST_TEMPLATE, trackTitle, artist));
 
@@ -92,18 +118,19 @@ namespace MusicBeePlugin
                 stream.Write(data, 0, data.Length);
 
             var response = (HttpWebResponse)req.GetResponse();
-            var page = new StreamReader(response.GetResponseStream()).ReadToEnd();
+            var page = new StreamReader(response.GetResponseStream()).ReadToEnd().Replace("&lt;br&gt;", "\n"); // html newlines
 
             var match = lyricsReg.Match(page);
             if (!match.Success)
                 return null;
 
-            string lyrics =
-                match.Groups[1].Value
-                    .Replace("&lt;br&gt;", "\n"); // html newlines
+            string lyrics = match.Groups[1].Value;
 
             if (!synchronisedPreferred)
                 lyrics = timingsReg.Replace(lyrics, ""); // remove timings
+
+            previousResult = page;
+            previousMatch = match;
             return lyrics;
         }
 
