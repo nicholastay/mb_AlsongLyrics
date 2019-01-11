@@ -7,6 +7,7 @@ using System.Net;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace MusicBeePlugin
 {
@@ -27,7 +28,7 @@ namespace MusicBeePlugin
             about.Type = PluginType.LyricsRetrieval;
             about.VersionMajor = 0;  // your plugin version
             about.VersionMinor = 1;
-            about.Revision = 1;
+            about.Revision = 2;
             about.MinInterfaceVersion = MinInterfaceVersion;
             about.MinApiRevision = MinApiRevision;
             about.ReceiveNotifications = ReceiveNotificationFlags.StartupOnly;
@@ -78,15 +79,15 @@ namespace MusicBeePlugin
         // workaround for getting other results
         private Match previousMatch = null;
         private string previousResult = null;
-        private string previousFile = null;
+        private string[] previousTrack = new string[] { };
 
         // return lyrics for the requested artist/title from the requested provider
         // only required if PluginType = LyricsRetrieval
         // return null if no lyrics are found
         public string RetrieveLyrics(string sourceFileUrl, string artist, string trackTitle, string album, bool synchronisedPreferred, string provider)
         {
-            string currFile = mbApiInterface.NowPlaying_GetFileUrl();
-            if (previousFile == currFile && previousMatch != null)
+            string[] currTrack = new string[] { artist, trackTitle, album };
+            if (currTrack.SequenceEqual(previousTrack) && previousMatch != null)
             {
                 previousMatch = previousMatch.NextMatch();
                 if (!previousMatch.Success)
@@ -102,7 +103,7 @@ namespace MusicBeePlugin
             }
 
 
-            previousFile = currFile;
+            previousTrack = currTrack;
             previousMatch = null;
             previousResult = null;
 
