@@ -73,7 +73,7 @@ namespace MusicBeePlugin
         private const string ALSONG_POST_TEMPLATE = "<Envelope xmlns=\"http://www.w3.org/2003/05/soap-envelope\"><Body><GetResembleLyric2 xmlns=\"ALSongWebServer\"><stQuery><strTitle>{0}</strTitle><strArtistName>{1}</strArtistName></stQuery></GetResembleLyric2></Body></Envelope>";
 
         private Regex lyricsReg = new Regex("<strLyric>(.*?)</strLyric>");
-        //private Regex timingsReg = new Regex("^\\[\\d\\d:\\d\\d.\\d\\d\\]", RegexOptions.Multiline);
+        private Regex timingsReg = new Regex("^\\[\\d\\d:\\d\\d.\\d\\d\\]", RegexOptions.Multiline);
 
         // return lyrics for the requested artist/title from the requested provider
         // only required if PluginType = LyricsRetrieval
@@ -101,7 +101,9 @@ namespace MusicBeePlugin
             string lyrics =
                 match.Groups[1].Value
                     .Replace("&lt;br&gt;", "\n"); // html newlines
-            //lyrics = timingsReg.Replace(lyrics, ""); // remove timings
+
+            if (!synchronisedPreferred)
+                lyrics = timingsReg.Replace(lyrics, ""); // remove timings
             return lyrics;
         }
 
