@@ -28,7 +28,7 @@ namespace MusicBeePlugin
             about.Type = PluginType.LyricsRetrieval;
             about.VersionMajor = 0;  // your plugin version
             about.VersionMinor = 1;
-            about.Revision = 2;
+            about.Revision = 3;
             about.MinInterfaceVersion = MinInterfaceVersion;
             about.MinApiRevision = MinApiRevision;
             about.ReceiveNotifications = ReceiveNotificationFlags.StartupOnly;
@@ -74,7 +74,7 @@ namespace MusicBeePlugin
         private const string ALSONG_POST_TEMPLATE = "<Envelope xmlns=\"http://www.w3.org/2003/05/soap-envelope\"><Body><GetResembleLyric2 xmlns=\"ALSongWebServer\"><stQuery><strTitle>{0}</strTitle><strArtistName>{1}</strArtistName></stQuery></GetResembleLyric2></Body></Envelope>";
 
         private Regex lyricsReg = new Regex("<strLyric>(.*?)</strLyric>", RegexOptions.Singleline);
-        private Regex timingsReg = new Regex("^\\[\\d\\d:\\d\\d.\\d\\d\\]", RegexOptions.Multiline);
+        private Regex timingsReg = new Regex("^\\[\\d+:\\d+\\.\\d+\\] ?", RegexOptions.Multiline);
 
         // workaround for getting other results
         private Match previousMatch = null;
@@ -99,7 +99,13 @@ namespace MusicBeePlugin
                 {
                     mbApiInterface.MB_SetBackgroundTaskMessage("ALSong Lyrics: Set lyric data to next result.");
                 }
-                return previousMatch.Groups[1].Value;
+
+                string l = previousMatch.Groups[1].Value;
+                if (!synchronisedPreferred)
+                    l = timingsReg.Replace(l, ""); // remove timings
+                else
+                    l = fixSync(l);
+                return l;
             }
 
 
@@ -129,6 +135,8 @@ namespace MusicBeePlugin
 
             if (!synchronisedPreferred)
                 lyrics = timingsReg.Replace(lyrics, ""); // remove timings
+            else
+                lyrics = fixSync(lyrics);
 
             previousResult = page;
             previousMatch = match;
@@ -142,6 +150,33 @@ namespace MusicBeePlugin
         {
             //Return Convert.ToBase64String(artworkBinaryData)
             return null;
+        }
+
+        private string fixSync(string lyr)
+        {
+            // removes duplicate new line lyric lines so it syncs and musicbee blocks the lines together
+            // https://stackoverflow.com/questions/1500194/c-looping-through-lines-of-multiline-string
+
+            string lyrics = "";
+            string prevTime = null;
+            using (StringReader reader = new StringReader(lyr))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (prevTime != null && line.StartsWith(prevTime))
+                        line = line.Replace(prevTime, "");
+                    prevTime = null;
+
+                    Match m = timingsReg.Match(line);
+                    if (m.Success)
+                        prevTime = m.Value;
+
+                    lyrics += line + "\n";
+                }
+            }
+
+            return lyrics;
         }
     }
 }
