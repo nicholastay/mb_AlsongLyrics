@@ -164,13 +164,14 @@ namespace MusicBeePlugin
                 string line;
                 while ((line = reader.ReadLine()) != null)
                 {
-                    if (prevTime != null && line.StartsWith(prevTime))
-                        line = line.Replace(prevTime, "");
-                    prevTime = null;
-
+                    string currTime = null;
                     Match m = timingsReg.Match(line);
                     if (m.Success)
-                        prevTime = m.Value;
+                        currTime = m.Value;
+
+                    if (prevTime != null && line.StartsWith(prevTime))
+                        line = line.Replace(prevTime, "");
+                    prevTime = currTime;
 
                     lyrics += line + "\n";
                 }
