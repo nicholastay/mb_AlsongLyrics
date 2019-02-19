@@ -13,6 +13,9 @@ namespace MusicBeePlugin
 {
     public partial class Plugin
     {
+        [DllImport("user32.dll")]
+        static extern short GetAsyncKeyState(int vKey);
+
         private MusicBeeApiInterface mbApiInterface;
         private PluginInfo about = new PluginInfo();
 
@@ -113,8 +116,20 @@ namespace MusicBeePlugin
             previousMatch = null;
             previousResult = null;
 
+            // custom override
+            string searchTitle = trackTitle;
+            string searchArtist = artist;
+            if (isKeyDown(0xA0) && isKeyDown(0xA2)) // VK_LSHIFT && VK_LCONTROL
+            {
+                var qf = new mb_AlsongLyrics.AlsongCustomQueryForm(currTrack);
+                qf.ShowDialog();
+
+                searchTitle = qf.Title;
+                searchArtist = qf.Artist;
+            }
+
             var req = (HttpWebRequest)WebRequest.Create(ALSONG_API);
-            var data = Encoding.UTF8.GetBytes(String.Format(ALSONG_POST_TEMPLATE, trackTitle, artist));
+            var data = Encoding.UTF8.GetBytes(String.Format(ALSONG_POST_TEMPLATE, searchTitle, searchArtist));
 
             req.Method = "POST";
             req.ContentType = "application/soap+xml; charset=UTF-8";
@@ -178,6 +193,14 @@ namespace MusicBeePlugin
             }
 
             return lyrics;
+        }
+
+        private bool isKeyDown(int k)
+        {
+            short s = GetAsyncKeyState(k);
+            if ((s & 0x8000) > 0) // most sig bit for a short is set -> key down
+                return true;
+            return false;
         }
     }
 }
