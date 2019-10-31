@@ -90,33 +90,8 @@ namespace MusicBeePlugin
         public string RetrieveLyrics(string sourceFileUrl, string artist, string trackTitle, string album, bool synchronisedPreferred, string provider)
         {
             string[] currTrack = new string[] { artist, trackTitle, album };
-            if (currTrack.SequenceEqual(previousTrack) && previousMatch != null)
-            {
-                previousMatch = previousMatch.NextMatch();
-                if (!previousMatch.Success)
-                {
-                    previousMatch = lyricsReg.Match(previousResult);
-                    mbApiInterface.MB_SetBackgroundTaskMessage("ALSong Lyrics: No more results. Resetted to the first result.");
-                }
-                else
-                {
-                    mbApiInterface.MB_SetBackgroundTaskMessage("ALSong Lyrics: Set lyric data to next result.");
-                }
 
-                string l = previousMatch.Groups[1].Value;
-                if (!synchronisedPreferred)
-                    l = timingsReg.Replace(l, ""); // remove timings
-                else
-                    l = fixSync(l);
-                return l;
-            }
-
-
-            previousTrack = currTrack;
-            previousMatch = null;
-            previousResult = null;
-
-            // custom override
+            // custom override above all else
             string searchTitle = trackTitle;
             string searchArtist = artist;
             if (isKeyDown(0xA0) && isKeyDown(0xA2)) // VK_LSHIFT && VK_LCONTROL
@@ -127,6 +102,35 @@ namespace MusicBeePlugin
                 searchTitle = qf.Title;
                 searchArtist = qf.Artist;
             }
+            else
+            {
+                // cycle through hack
+                if (currTrack.SequenceEqual(previousTrack) && previousMatch != null)
+                {
+                    previousMatch = previousMatch.NextMatch();
+                    if (!previousMatch.Success)
+                    {
+                        previousMatch = lyricsReg.Match(previousResult);
+                        mbApiInterface.MB_SetBackgroundTaskMessage("ALSong Lyrics: No more results. Resetted to the first result.");
+                    }
+                    else
+                    {
+                        mbApiInterface.MB_SetBackgroundTaskMessage("ALSong Lyrics: Set lyric data to next result.");
+                    }
+
+                    string l = previousMatch.Groups[1].Value;
+                    if (!synchronisedPreferred)
+                        l = timingsReg.Replace(l, ""); // remove timings
+                    else
+                        l = fixSync(l);
+                    return l;
+                }
+            }
+
+
+            previousTrack = currTrack;
+            previousMatch = null;
+            previousResult = null;
 
             var req = (HttpWebRequest)WebRequest.Create(ALSONG_API);
             var data = Encoding.UTF8.GetBytes(String.Format(ALSONG_POST_TEMPLATE, searchTitle, searchArtist));
