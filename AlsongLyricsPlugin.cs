@@ -30,8 +30,8 @@ namespace MusicBeePlugin
             about.TargetApplication = "";   // current only applies to artwork, lyrics or instant messenger name that appears in the provider drop down selector or target Instant Messenger
             about.Type = PluginType.LyricsRetrieval;
             about.VersionMajor = 0;  // your plugin version
-            about.VersionMinor = 1;
-            about.Revision = 3;
+            about.VersionMinor = 2;
+            about.Revision = 0;
             about.MinInterfaceVersion = MinInterfaceVersion;
             about.MinApiRevision = MinApiRevision;
             about.ReceiveNotifications = ReceiveNotificationFlags.StartupOnly;
@@ -73,16 +73,27 @@ namespace MusicBeePlugin
             return new string[] { "ALSong" };
         }
 
-        private const string ALSONG_API = "http://lyrics.alsong.co.kr/alsongwebservice/service1.asmx";
-        private const string ALSONG_POST_TEMPLATE = "<Envelope xmlns=\"http://www.w3.org/2003/05/soap-envelope\"><Body><GetResembleLyric2 xmlns=\"ALSongWebServer\"><stQuery><strTitle>{0}</strTitle><strArtistName>{1}</strArtistName></stQuery></GetResembleLyric2></Body></Envelope>";
-
-        private Regex lyricsReg = new Regex("<strLyric>(.*?)</strLyric>", RegexOptions.Singleline);
-        private Regex timingsReg = new Regex("^\\[\\d+:\\d+\\.\\d+\\] ?", RegexOptions.Multiline);
-
-        // workaround for getting other results
-        private Match previousMatch = null;
-        private string previousResult = null;
-        private string[] previousTrack = new string[] { };
+        // It seems like alsong needs 'encData' - idk what this is, but use some random same value seems to work always, so just gonna use it
+        public string ALSONG_API = "http://lyrics.alsong.co.kr/alsongwebservice/service1.asmx";
+        public string ALSONG_ENC_DATA = "4e06a8c06f189e54e0f22e7f645f172bc6ba2702618c445c2973848e004d4709d745cad80f1fc63654bae492019e771af038de6822b1123687d6598f0064cae237c4e1ac873f4d3aa267a6c27197878a0638cf29b571f049d50add1f4303b8d46c05020516d5ca8000d05a10371829da7a90aad4f4c68a62c0c6083ede28f247";
+        public string ALSONG_POST_TEMPLATE = @"<?xml version=""1.0"" encoding=""UTF-8""?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV=""http://www.w3.org/2003/05/soap-envelope""
+xmlns:SOAP-ENC=""http://www.w3.org/2003/05/soap-encoding""
+xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""
+xmlns:xsd=""http://www.w3.org/2001/XMLSchema""
+xmlns:ns2=""ALSongWebServer/Service1Soap"" 
+xmlns:ns1=""ALSongWebServer"" 
+xmlns:ns3=""ALSongWebServer/Service1Soap12"">
+<SOAP-ENV:Body>
+<ns1:GetSyncLyricBySearch>
+<ns1:encData>{2}</ns1:encData>
+<ns1:title>{0}</ns1:title>
+<ns1:artist>{1}</ns1:artist>
+</ns1:GetSyncLyricBySearch>
+</SOAP-ENV:Body>
+</SOAP-ENV:Envelope>";
+        public Regex AlsongLyricsReg = new Regex("<strLyric>(.*?)</strLyric>", RegexOptions.Singleline);
+        public Regex AlsongTimingsReg = new Regex("^\\[\\d+:\\d+\\.\\d+\\] ?", RegexOptions.Multiline);
 
         // return lyrics for the requested artist/title from the requested provider
         // only required if PluginType = LyricsRetrieval
@@ -102,63 +113,38 @@ namespace MusicBeePlugin
                 searchTitle = qf.Title;
                 searchArtist = qf.Artist;
             }
-            else
+            else if (isKeyDown(0xA2)) // VK_LCONTROL
             {
-                // cycle through hack
-                if (currTrack.SequenceEqual(previousTrack) && previousMatch != null)
-                {
-                    previousMatch = previousMatch.NextMatch();
-                    if (!previousMatch.Success)
-                    {
-                        previousMatch = lyricsReg.Match(previousResult);
-                        mbApiInterface.MB_SetBackgroundTaskMessage("ALSong Lyrics: No more results. Resetted to the first result.");
-                    }
-                    else
-                    {
-                        mbApiInterface.MB_SetBackgroundTaskMessage("ALSong Lyrics: Set lyric data to next result.");
-                    }
+                var af = new mb_AlsongLyrics.AlsongLyricPagingForm(currTrack, this);
+                af.ShowDialog();
 
-                    string l = previousMatch.Groups[1].Value;
-                    if (!synchronisedPreferred)
-                        l = timingsReg.Replace(l, ""); // remove timings
-                    else
-                        l = fixSync(l);
-                    return l;
-                }
+                string l = af.Lyrics;
+                if (l == null)
+                    return null;
+
+                if (!synchronisedPreferred)
+                    l = AlsongTimingsReg.Replace(l, ""); // remove timings
+                else
+                    l = fixSync(l);
+                return l;
             }
 
 
-            previousTrack = currTrack;
-            previousMatch = null;
-            previousResult = null;
+            string page = AlsongMakeRequest(String.Format(ALSONG_POST_TEMPLATE, searchTitle, searchArtist, ALSONG_ENC_DATA));
 
-            var req = (HttpWebRequest)WebRequest.Create(ALSONG_API);
-            var data = Encoding.UTF8.GetBytes(String.Format(ALSONG_POST_TEMPLATE, searchTitle, searchArtist));
-
-            req.Method = "POST";
-            req.ContentType = "application/soap+xml; charset=UTF-8";
-            req.ContentLength = data.Length;
-            req.UserAgent = "gSOAP";
-            req.Headers.Add("SOAPAction", "\"ALSongWebServer/GetResembleLyric2\"");
-            using (var stream = req.GetRequestStream())
-                stream.Write(data, 0, data.Length);
-
-            var response = (HttpWebResponse)req.GetResponse();
-            var page = new StreamReader(response.GetResponseStream()).ReadToEnd().Replace("&lt;br&gt;", "\n"); // html newlines
-
-            var match = lyricsReg.Match(page);
+            var match = AlsongLyricsReg.Match(page);
             if (!match.Success)
+            {
                 return null;
+            }
 
             string lyrics = match.Groups[1].Value;
 
             if (!synchronisedPreferred)
-                lyrics = timingsReg.Replace(lyrics, ""); // remove timings
+                lyrics = AlsongTimingsReg.Replace(lyrics, ""); // remove timings
             else
                 lyrics = fixSync(lyrics);
 
-            previousResult = page;
-            previousMatch = match;
             return lyrics;
         }
 
@@ -184,7 +170,7 @@ namespace MusicBeePlugin
                 while ((line = reader.ReadLine()) != null)
                 {
                     string currTime = null;
-                    Match m = timingsReg.Match(line);
+                    Match m = AlsongTimingsReg.Match(line);
                     if (m.Success)
                         currTime = m.Value;
 
@@ -205,6 +191,23 @@ namespace MusicBeePlugin
             if ((s & 0x8000) > 0) // most sig bit for a short is set -> key down
                 return true;
             return false;
+        }
+
+        public string AlsongMakeRequest(string formData)
+        {
+            var req = (HttpWebRequest)WebRequest.Create(ALSONG_API);
+            var data = Encoding.UTF8.GetBytes(formData);
+
+            req.Method = "POST";
+            req.ContentType = "application/soap+xml; charset=UTF-8";
+            req.ContentLength = data.Length;
+            req.UserAgent = "gSOAP";
+            using (var stream = req.GetRequestStream())
+                stream.Write(data, 0, data.Length);
+
+            var response = (HttpWebResponse)req.GetResponse();
+            var page = new StreamReader(response.GetResponseStream()).ReadToEnd().Replace("&lt;br&gt;", "\n"); // html newlines
+            return page;
         }
     }
 }

@@ -43,6 +43,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AlsongLyricPagingForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AlsongLyricPagingForm.Designer.cs">
+      <DependentUpon>AlsongLyricPagingForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="AlsongCustomQueryForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -54,6 +60,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="AlsongLyricPagingForm.resx">
+      <DependentUpon>AlsongLyricPagingForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="AlsongCustomQueryForm.resx">
       <DependentUpon>AlsongCustomQueryForm.cs</DependentUpon>
     </EmbeddedResource>
